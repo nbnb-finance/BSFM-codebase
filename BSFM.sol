@@ -65,6 +65,7 @@ contract BabySafeMoon is Context, Ownable, IERC20 {
       uint256 giveawaysFee;
       uint256 iBNBPoolFee;
       uint256 swapFee;
+      uint256 totFees;
     }
     
     feeRatesStruct public buyFees = feeRatesStruct(
