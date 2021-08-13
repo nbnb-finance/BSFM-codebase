@@ -45,7 +45,7 @@ contract BabySafeMoon is Context, Ownable, IERC20 {
     mapping(address => uint256) private _firstSell;
     mapping(address => uint256) private _totSells;
     
-    mapping(address => bool) private _isBot;
+    mapping(address => bool) private _isBadActor;
 
 
     mapping (address => bool) private _isExcludedFromFee;
@@ -503,7 +503,7 @@ contract BabySafeMoon is Context, Ownable, IERC20 {
         require(from != address(0), "ERC20: transfer from the zero address");
         require(to != address(0), "ERC20: transfer to the zero address");
         require(amount > 0, "Transfer amount must be greater than zero");
-        require(!_isBot[from] && !_isBot[to], "Bots are not allowed");
+        require(!_isBadActor[from] && !_isBadActor[to], "Bots are not allowed");
         
         if(!_isExcludedFromFee[from] && !_isExcludedFromFee[to]){
             require(amount <= maxTxAmount, 'you are exceeding maxTxAmount');
@@ -549,7 +549,7 @@ contract BabySafeMoon is Context, Ownable, IERC20 {
             }
         }
              
-        //transfer amount, it will take tax, burn, liquidity fee
+        // transfer amount, it will take tax, burn, liquidity fee
         _tokenTransfer(from,to,amount,takeFee, isSale);
     }
     
@@ -587,13 +587,13 @@ contract BabySafeMoon is Context, Ownable, IERC20 {
     }
 
 
-    //this method is responsible for taking all fee, if takeFee is true
+    // this method is responsible for taking all fee, if takeFee is true
     function _tokenTransfer(address sender, address recipient, uint256 amount,bool takeFee, bool isSale) private {
         if(takeFee){
             if(isSale)
             {
             appliedFees = sellFees;
-            appliedFees.totFees+=getAntiwhaleFee(_totSells[sender]);
+            appliedFees.totFees += getAntiwhaleFee(_totSells[sender]);
             }
             else
             {
@@ -634,7 +634,6 @@ contract BabySafeMoon is Context, Ownable, IERC20 {
           //////////////////////////
 
 
-
     function rescueBNBFromContract() external onlyOwner {
         address payable _owner = payable(msg.sender);
         _owner.transfer(address(this).balance);
@@ -650,12 +649,13 @@ contract BabySafeMoon is Context, Ownable, IERC20 {
     }
 
 
-    function badActorDefenseMechanism(address account, bool isBot) external onlyOwner{
-        _isBot[account] = isBot;
+    // To be used for snipe-bots and bad actors communicated on with the community.
+    function badActorDefenseMechanism(address account, bool isBadActor) external onlyOwner{
+        _isBadActor[account] = isBadActor;
     }
     
-    function checkBot(address account) public view returns(bool){
-        return _isBot[account];
+    function checkBadActor(address account) public view returns(bool){
+        return _isBadActor[account];
     }
     
     function setRouterAddress(address newRouter) external onlyOwner {
