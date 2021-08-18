@@ -96,7 +96,6 @@ contract BabySafeMoon is Context, Ownable, IERC20 {
 
     feeRatesStruct private appliedFees = buyFees; //default value
     feeRatesStruct private previousFees;
-    feeRatesStruct private zeroFees;
 
     struct antiwhale {
       uint256 selling_threshold;//this is value/1000 %
@@ -104,6 +103,17 @@ contract BabySafeMoon is Context, Ownable, IERC20 {
     }
 
     antiwhale[3] public antiwhale_measures;
+
+    struct valuesFromGetValues{
+      uint256 rAmount;
+      uint256 rTransferAmount;
+      uint256 rFee;
+      uint256 rSwap;
+      uint256 tTransferAmount;
+      uint256 tFee;
+      uint256 tSwap;
+    }
+
     
     uint256 public maxSellPerDay = _tTotal/1000;
     
@@ -258,9 +268,9 @@ contract BabySafeMoon is Context, Ownable, IERC20 {
     function deliver(uint256 tAmount) public {
         address sender = _msgSender();
         require(!_isExcluded[sender], "Excluded addresses cannot call this function");
-        (uint256 rAmount,,,,,,) = _getValues(tAmount);
-        _rOwned[sender] -= rAmount;
-        _rTotal -= rAmount;
+        valuesFromGetValues memory s = _getValues(tAmount, false);
+        _rOwned[sender] -= s.rAmount;
+        _rTotal -= s.rAmount;
         _tFeeTotal += tAmount;
     }
 
@@ -268,11 +278,11 @@ contract BabySafeMoon is Context, Ownable, IERC20 {
     function reflectionFromToken(uint256 tAmount, bool deductTransferFee) external view returns(uint256) {
         require(tAmount <= _tTotal, "Amount must be less than supply");
         if (!deductTransferFee) {
-            (uint256 rAmount,,,,,,) = _getValues(tAmount);
-            return rAmount;
+            valuesFromGetValues memory s = _getValues(tAmount, false);
+            return s.rAmount;
         } else {
-            (,uint256 rTransferAmount,,,,,) = _getValues(tAmount);
-            return rTransferAmount;
+            valuesFromGetValues memory s = _getValues(tAmount, true);
+            return s.rTransferAmount;
         }
     }
 
@@ -338,25 +348,33 @@ contract BabySafeMoon is Context, Ownable, IERC20 {
     }
 
 
-    function _getValues(uint256 tAmount) private view returns (uint256, uint256, uint256, uint256, uint256, uint256, uint256) {
-        (uint256 tTransferAmount, uint256 tFee, uint256 tSwap) = _getTValues(tAmount);
-        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 rSwap) = _getRValues(tAmount, tFee, tSwap, _getRate());
-        return (rAmount, rTransferAmount, rFee, rSwap, tTransferAmount, tFee, tSwap);
+    function _getValues(uint256 tAmount, bool takeFee) private view returns (valuesFromGetValues memory to_return) {
+        to_return = _getTValues(tAmount, takeFee);
+        (to_return.rAmount, to_return.rTransferAmount, to_return.rFee, to_return.rSwap) = _getRValues(to_return,tAmount, takeFee, _getRate());
+        return to_return;
     }
 
 
-    function _getTValues(uint256 tAmount) private view returns (uint256, uint256, uint256) {
-        uint256 tFee = tAmount*appliedFees.totFees*appliedFees.taxFee/1000000;
-        uint256 tSwap = tAmount*appliedFees.totFees*appliedFees.swapFee/1000000;
-        uint256 tTransferAmount = tAmount-tFee-tSwap;
-        return (tTransferAmount, tFee, tSwap);
+    function _getTValues(uint256 tAmount, bool takeFee) private view returns (valuesFromGetValues memory s) {
+        if(!takeFee) {
+          s.tTransferAmount = tAmount;
+          return s;
+        }
+        s.tFee = tAmount*appliedFees.totFees*appliedFees.taxFee/1000000;
+        s.tSwap = tAmount*appliedFees.totFees*appliedFees.swapFee/1000000;
+        s.tTransferAmount = tAmount-s.tFee-s.tSwap;
+        return s;
     }
 
 
-    function _getRValues(uint256 tAmount, uint256 tFee, uint256 tSwap, uint256 currentRate) private pure returns (uint256, uint256, uint256, uint256) {
+    function _getRValues(valuesFromGetValues memory s, uint256 tAmount, bool takeFee, uint256 currentRate) private pure returns (uint256, uint256, uint256, uint256) {
         uint256 rAmount = tAmount*currentRate;
-        uint256 rFee = tFee*currentRate;
-        uint256 rSwap = tSwap*currentRate;
+        if(!takeFee)
+        {
+            return (rAmount,rAmount,0,0);
+        }
+        uint256 rFee = s.tFee*currentRate;
+        uint256 rSwap = s.tSwap*currentRate;
         uint256 rTransferAmount = rAmount-rFee-rSwap;
         return (rAmount, rTransferAmount, rFee, rSwap);
     }
@@ -600,33 +618,25 @@ contract BabySafeMoon is Context, Ownable, IERC20 {
             appliedFees = buyFees;
             }
         }
-        else
-            {  
-              previousFees = appliedFees;
-              appliedFees = zeroFees;
-            }
         
-        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 rSwap, uint256 tTransferAmount, uint256 tFee, uint256 tSwap) = _getValues(amount);
+        valuesFromGetValues memory s = _getValues(amount, takeFee);
 
         if (_isExcluded[sender]) {
             _tOwned[sender] -=amount;
         } 
         if (_isExcluded[recipient]) {
-            _tOwned[recipient] += tTransferAmount;
+            _tOwned[recipient] += s.tTransferAmount;
         }
-        _rOwned[sender] -= rAmount;
-        _rOwned[recipient] +=rTransferAmount;
+        _rOwned[sender] -= s.rAmount;
+        _rOwned[recipient] +=s.rTransferAmount;
         
         if(takeFee)
             {
-             _takeSwapFees(rSwap,tSwap);
-             _reflectFee(rFee, tFee);
-             emit Transfer(sender, address(this), tSwap);
-            } 
-            else
-                {appliedFees = previousFees;
-                } 
-        emit Transfer(sender, recipient, tTransferAmount);
+             _takeSwapFees(s.rSwap,s.tSwap);
+             _reflectFee(s.rFee, s.tFee);
+             emit Transfer(sender, address(this), s.tSwap);
+            }
+        emit Transfer(sender, recipient, s.tTransferAmount);
     }
     
             //////////////////////////
