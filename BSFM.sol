@@ -446,7 +446,7 @@ contract BabySafeMoon is Context, Ownable, IERC20 {
         maxSellPerDay = amount * 10**9;
     }
     
-    function setAntiwhaleMeasure(uint256[3] memory selling_thresholds, uint256[3] memory extra_taxes ) external {
+    function setAntiwhaleMeasure(uint256[3] memory selling_thresholds, uint256[3] memory extra_taxes ) external onlyOwner{
         //values of selling_threshold (are values in input)/1000 % of total supply , extra taxes are expressed in %
         antiwhale_measures[0] = antiwhale({selling_threshold: _tTotal*selling_thresholds[0]/100000 , extra_tax: extra_taxes[0]});
         antiwhale_measures[1] = antiwhale({selling_threshold: _tTotal*selling_thresholds[1]/100000 , extra_tax: extra_taxes[1]});
